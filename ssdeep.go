@@ -35,9 +35,10 @@ const (
 )
 
 var (
-	b64 = []byte(b64String)
+	b64                 = []byte(b64String)
+	blockSizeSmallLimit = int(math.Floor(float64(99+rollingWindow) / rollingWindow * blockMin))
 	// Force calculates the hash on invalid input
-	Force = false
+	Force = true
 )
 
 type rollingState struct {

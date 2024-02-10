@@ -70,16 +70,57 @@ func splitSsdeep(hash string) (int, string, string, error) {
 	return blockSize, parts[1], parts[2], nil
 }
 
+func hasCommonSubstring(h1, h2 string) bool {
+	l1 := len(h1)
+	l2 := len(h2)
+	if l1 < rollingWindow || l2 < rollingWindow {
+		return false
+	}
+
+	hashes := make([]uint32, 0, spamSumLength-rollingWindow+1)
+	state := rollingState{}
+	for i := 0; i < rollingWindow-1; i++ {
+		state.rollHash(h1[i])
+	}
+	for i := rollingWindow - 1; i < l1; i++ {
+		state.rollHash(h1[i])
+		hashes = append(hashes, state.rollSum())
+	}
+
+	state = rollingState{}
+	for j := 0; j < rollingWindow-1; j++ {
+		state.rollHash(h2[j])
+	}
+	for j := 0; j < l2-rollingWindow+1; j++ {
+		state.rollHash(h2[j+rollingWindow-1])
+		h := state.rollSum()
+		for i, hash := range hashes {
+			if hash == h && h1[i:i+rollingWindow] == h2[j:j+rollingWindow] {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
 func scoreDistance(h1, h2 string, blockSize int) int {
+	if !hasCommonSubstring(h1, h2) {
+		return 0
+	}
+
 	d := distance(h1, h2)
 	d = (d * spamSumLength) / (len(h1) + len(h2))
 	d = (100 * d) / spamSumLength
 	d = 100 - d
-	/* TODO: Figure out this black magic...
-	matchSize := float64(blockSize) / float64(blockMin) * math.Min(float64(len(h1)), float64(len(h2)))
-	if d > int(matchSize) {
-		d = int(matchSize)
+
+	if blockSize >= blockSizeSmallLimit {
+		return d
 	}
-	*/
+
+	matchSize := int(float64(blockSize) / blockMin * math.Min(float64(len(h1)), float64(len(h2))))
+	if d > matchSize {
+		return matchSize
+	}
 	return d
 }
