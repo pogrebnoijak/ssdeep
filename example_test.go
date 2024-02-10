@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"os"
 
-	"github.com/glaslos/ssdeep"
+	"github.com/pogrebnoijak/ssdeep"
 )
 
 func ExampleFuzzyFile() {
