@@ -1,11 +1,11 @@
 package ssdeep
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 )
 
 var (
@@ -31,7 +31,9 @@ func Distance(hash1, hash2 string) (int, error) {
 		return score, err
 	}
 
-	if hash1BlockSize == hash2BlockSize && hash1String1 == hash2String1 {
+	if hash1BlockSize == hash2BlockSize &&
+		len(hash1String1) == len(hash2String1) && len(hash1String2) == len(hash2String2) &&
+		hash1String1 == hash2String1 && hash1String2 == hash2String2 {
 		return 100, nil
 	}
 
@@ -57,17 +59,77 @@ func splitSsdeep(hash string) (int, string, string, error) {
 		return 0, "", "", ErrEmptyHash
 	}
 
-	parts := strings.Split(hash, ":")
-	if len(parts) != 3 {
+	hashBytes := []byte(hash)
+
+	var index int
+	var buffer bytes.Buffer
+	buffer.Grow(len(hashBytes))
+
+	for i, b := range hashBytes {
+		if b == ':' {
+			index = i + 1
+			break
+		}
+		buffer.WriteByte(b)
+	}
+	if index == 0 {
 		return 0, "", "", ErrInvalidFormat
 	}
 
-	blockSize, err := strconv.Atoi(parts[0])
+	blockSize, err := strconv.Atoi(buffer.String())
 	if err != nil {
 		return blockSize, "", "", fmt.Errorf("%s: %w", ErrInvalidFormat.Error(), err)
 	}
+	buffer.Reset()
 
-	return blockSize, parts[1], parts[2], nil
+	indexUpdated := false
+	seq := 0
+	var prev byte = ':'
+	for i, curr := range hashBytes[index:] {
+		if curr == ':' {
+			indexUpdated = true
+			index = index + i + 1
+			break
+		}
+		if curr == prev {
+			seq++
+			if seq < 3 {
+				buffer.WriteByte(curr)
+			}
+		} else {
+			buffer.WriteByte(curr)
+			seq = 0
+			prev = curr
+		}
+	}
+	if !indexUpdated {
+		return 0, "", "", ErrInvalidFormat
+	}
+
+	part1 := buffer.String()
+	buffer.Reset()
+
+	seq = 0
+	prev = ':'
+	for _, curr := range hashBytes[index:] {
+		if curr == ':' {
+			return 0, "", "", ErrInvalidFormat
+		}
+		if curr == prev {
+			seq++
+			if seq < 3 {
+				buffer.WriteByte(curr)
+			}
+		} else {
+			buffer.WriteByte(curr)
+			seq = 0
+			prev = curr
+		}
+	}
+
+	part2 := buffer.String()
+
+	return blockSize, part1, part2, nil
 }
 
 func hasCommonSubstring(h1, h2 string) bool {
